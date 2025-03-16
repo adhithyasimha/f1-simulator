@@ -1,6 +1,6 @@
 # 🏎️ Kafka F1 Race Simulator - Singapore GP Edition 🏁
 
-This isn't just another data project - it's a ticket to experiencing the thrill of the Singapore night race through the lens of real-time event processing!
+This isn't just another data project - it's a ticket to experience the thrill of the Singapore night race through the lens of real-time event processing!
 
 This project lets you recreate the magic of racing under the lights at Marina Bay, with all the humidity, tight corners, and concrete walls that make Singapore one of the most demanding circuits on the calendar.
 
