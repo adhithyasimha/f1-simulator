@@ -24,9 +24,9 @@ class Weather(Enum):
     HEAVY_RAIN = "Heavy Rain"
 
 class TireCompound:
-    SOFT = {"name": "Soft (S)", "max_laps": 20, "pace_delta": -1.2, "wear_rate": 1.5, "color": "\033[31m"}
-    MEDIUM = {"name": "Medium (M)", "max_laps": 25, "pace_delta": 0, "wear_rate": 1.0, "color": "\033[33m"}
-    HARD = {"name": "Hard (H)", "max_laps": 30, "pace_delta": 0.8, "wear_rate": 0.7, "color": "\033[37m"}
+    SOFT = {"name": "Soft (S)", "max_laps": 2, "pace_delta": -1.2, "wear_rate": 1.5, "color": "\033[31m"}
+    MEDIUM = {"name": "Medium (M)", "max_laps": 3, "pace_delta": 0, "wear_rate": 1.0, "color": "\033[33m"}
+    HARD = {"name": "Hard (H)", "max_laps": 5, "pace_delta": 0.8, "wear_rate": 0.7, "color": "\033[37m"}
 
 class TeamPerformance:
     FACTORS = {
@@ -112,7 +112,7 @@ class F1Simulator:
         )
         self.drivers = self.consume_grid_from_kafka()
         self.cars = [Car(driver) for driver in self.drivers]
-        self.total_laps = 61
+        self.total_laps = 20
         self.current_lap = 0
         self.race_status = RaceStatus.GREEN
         self.safety_car = False
