@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, explode
 from pyspark.sql.types import StructType, StructField, StringType, FloatType, IntegerType, ArrayType
+import psycopg2
 
 def create_spark_session():
     """Creates and configures a SparkSession."""
@@ -27,6 +28,29 @@ def define_race_schema():
             ])
         ))
     ])
+
+def truncate_postgres_table():
+    """Truncates the f1_lap_times table in PostgreSQL."""
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host="localhost",
+            database="f1db",
+            user="postgres",
+            password="postgres"
+        )
+        cur = conn.cursor()
+        cur.execute("TRUNCATE TABLE f1_lap_times;")
+        conn.commit()
+        print("Table f1_lap_times truncated successfully.")
+    except psycopg2.Error as e:
+        print(f"Error truncating table: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
 
 def write_to_postgres(batch_df, batch_id):
     """Writes the DataFrame batch to PostgreSQL in the new table."""
@@ -97,6 +121,8 @@ def process_lap_data(spark):
 
 if __name__ == "__main__":
     print("Starting F1 Realtime Lap Analysis script...")
+    # Truncate the PostgreSQL table before starting the Spark job
+    truncate_postgres_table()
     spark_session = None
     try:
         spark_session = create_spark_session()
