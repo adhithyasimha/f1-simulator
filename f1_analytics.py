@@ -1,10 +1,12 @@
-# f1_analytics.py
+import streamlit as st
 import psycopg2
 import pandas as pd
 import matplotlib.pyplot as plt
 from psycopg2.extras import RealDictCursor
 import json
+import time
 
+# --- Database Connection ---
 def connect_to_db():
     conn = psycopg2.connect(
         host="localhost",
@@ -15,104 +17,118 @@ def connect_to_db():
     )
     return conn
 
-def get_latest_race_status():
+# --- Data Fetching Functions ---
+@st.cache_data(ttl=5)  # Cache for 5 seconds for near real-time updates
+def get_latest_race_status_streamlit():
     conn = connect_to_db()
     cursor = conn.cursor()
-    
     cursor.execute("""
-    SELECT * FROM race_updates 
-    ORDER BY id DESC 
+    SELECT * FROM race_updates
+    ORDER BY id DESC
     LIMIT 1
     """)
-    
     result = cursor.fetchone()
     cursor.close()
     conn.close()
-    
     return result
 
-def get_driver_lap_times(driver_name):
+@st.cache_data(ttl=5)
+def get_driver_lap_times_streamlit(driver_number):
     conn = connect_to_db()
     cursor = conn.cursor()
-    
     cursor.execute("""
-    SELECT 
-        id, current_lap, cars
-    FROM 
-        race_updates 
-    WHERE 
-        sector = 3
-    ORDER BY 
+    SELECT
+        current_lap, lap_time
+    FROM
+        f1_lap_times
+    WHERE
+        driver_number = %s
+    ORDER BY
         current_lap
-    """)
-    
+    """, (driver_number,))
     results = cursor.fetchall()
     cursor.close()
     conn.close()
-    
-    lap_times = []
-    
-    for row in results:
-        cars = json.loads(row['cars']) if isinstance(row['cars'], str) else row['cars']
-        for car in cars:
-            if car['driver']['name'] == driver_name:
-                lap_times.append({
-                    'lap': row['current_lap'],
-                    'time': car['last_lap']
-                })
-                break
-    
+    lap_times = pd.DataFrame(results)
     return lap_times
 
-def plot_lap_time_comparison(driver1, driver2):
-    driver1_data = get_driver_lap_times(driver1)
-    driver2_data = get_driver_lap_times(driver2)
-    
-    d1_laps = [d['lap'] for d in driver1_data]
-    d1_times = [d['time'] for d in driver1_data]
-    
-    d2_laps = [d['lap'] for d in driver2_data]
-    d2_times = [d['time'] for d in driver2_data]
-    
-    plt.figure(figsize=(12, 6))
-    plt.plot(d1_laps, d1_times, 'b-', label=driver1)
-    plt.plot(d2_laps, d2_times, 'r-', label=driver2)
-    plt.title(f'Lap Time Comparison: {driver1} vs {driver2}')
-    plt.xlabel('Lap Number')
-    plt.ylabel('Lap Time (seconds)')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('lap_time_comparison.png')
-    print(f"Lap time comparison saved to lap_time_comparison.png")
+@st.cache_data(ttl=3600)  # Cache driver names for longer
+def get_driver_name_streamlit(driver_number):
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT DISTINCT driver_name
+    FROM f1_lap_times
+    WHERE driver_number = %s
+    """, (driver_number,))
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return result['driver_name'] if result else f"Driver #{driver_number}"
 
-def display_race_summary():
-    race_data = get_latest_race_status()
-    
-    if not race_data:
-        print("No race data found in the database")
-        return
-    
-    cars = json.loads(race_data['cars']) if isinstance(race_data['cars'], str) else race_data['cars']
-    cars.sort(key=lambda x: x['position'])
-    
-    print(f"\nRace Summary - {race_data['circuit_name']}")
-    print(f"Lap: {race_data['current_lap']}/{race_data['total_laps']}")
-    print(f"Status: {race_data['race_status']}")
-    print(f"Weather: {race_data['weather']}")
-    print("\nDriver Standings:")
-    print("=" * 50)
-    print(f"{'Pos':<4}{'Driver':<20}{'Team':<15}{'Gap':<10}{'Status':<15}")
-    print("-" * 50)
-    
-    for car in cars:
-        gap = "LEADER" if car['position'] == 1 else f"+{car['gap_to_leader']:.3f}s"
-        print(f"{car['position']:<4}{car['driver']['name']:<20}{car['driver']['team']:<15}{gap:<10}{car['race_status']:<15}")
+@st.cache_data(ttl=60)  # Cache for a minute as driver numbers might not change frequently
+def get_distinct_driver_numbers():
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT DISTINCT driver_number
+    FROM f1_lap_times
+    ORDER BY driver_number
+    """)
+    results = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [row['driver_number'] for row in results]
 
+# --- Streamlit App ---
+st.title("Real-time F1 Race Analytics")
+
+# Sidebar for Driver Selection
+st.sidebar.header("Driver Comparison")
+available_drivers = get_distinct_driver_numbers()
+selected_drivers = st.sidebar.multiselect("Select drivers for lap time comparison:", available_drivers, default=[1, 44] if 1 in available_drivers and 44 in available_drivers and len(available_drivers) >= 2 else available_drivers[:min(2, len(available_drivers))])
+
+# Real-time Race Summary
+st.subheader("Latest Race Status")
+race_status = get_latest_race_status_streamlit()
+if race_status:
+    st.write(f"**Circuit:** {race_status['circuit_name']}")
+    st.write(f"**Lap:** {race_status['current_lap']}/{race_status['total_laps']}")
+    st.write(f"**Status:** {race_status['race_status']}")
+    st.write(f"**Weather:** {race_status['weather']}")
+
+    st.subheader("Driver Standings")
+    cars_data = json.loads(race_status['cars']) if isinstance(race_status['cars'], str) else race_status['cars']
+    standings_df = pd.DataFrame(cars_data)
+    standings_df = standings_df.sort_values(by='position')
+    standings_df['Gap'] = standings_df.apply(lambda row: 'LEADER' if row['position'] == 1 else f"+{row['gap_to_leader']:.3f}s", axis=1)
+    standings_df = standings_df[['position', 'driver', 'driver.number', 'driver.team', 'Gap', 'race_status']]
+    standings_df.columns = ['Pos', 'Driver', 'Number', 'Team', 'Gap', 'Status']
+    st.dataframe(standings_df, hide_index=True)
+else:
+    st.warning("No race data available.")
+
+# Real-time Lap Time Comparison Plot
+if selected_drivers:
+    st.subheader("Lap Time Comparison")
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for driver_number in selected_drivers:
+        lap_data = get_driver_lap_times_streamlit(driver_number)
+        if not lap_data.empty:
+            driver_name = get_driver_name_streamlit(driver_number)
+            ax.plot(lap_data['current_lap'], lap_data['lap_time'], marker='o', linestyle='-', linewidth=1, markersize=3, label=f"#{driver_number} {driver_name}")
+        else:
+            st.warning(f"No lap time data found for driver number {driver_number}.")
+
+    ax.set_xlabel("Lap Number")
+    ax.set_ylabel("Lap Time (seconds)")
+    ax.set_title("Lap Time Comparison")
+    ax.legend()
+    ax.grid(True)
+    st.pyplot(fig)
+else:
+    st.info("Select drivers in the sidebar to see lap time comparison.")
+
+# --- Run the Streamlit App ---
 if __name__ == "__main__":
-    print("\nF1 Race Analytics Dashboard")
-    print("=" * 50)
-    
-    display_race_summary()
-    
-    # Example of plotting lap time comparison between two drivers
-    plot_lap_time_comparison("Max Verstappen", "Lewis Hamilton")
+    pass # Streamlit will handle the execution
