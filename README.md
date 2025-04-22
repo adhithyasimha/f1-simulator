@@ -12,6 +12,12 @@ The simulation runs in two heart-pounding stages:
 - **Race Simulation:** 🏁  
   The race simulation script (`race_simulation.py`) consumes the grid data from Kafka, then brings the full 61-lap Marina Bay street circuit to life! Every overtake attempt, safety car deployment, and pit stop strategy is broadcast to the `race` Kafka topic.
 
+- **Real-time Data Processing:** 📊  
+  The Spark streaming application (`f1_data_processing.py`) processes race data from Kafka in real-time, extracts lap times and driver information, and stores it in a PostgreSQL database for analytics.
+
+- **Live Race Analytics:** 📈  
+  The Streamlit dashboard (`f1_analytics.py`) provides real-time visualization of race standings, lap time comparisons, and race status updates directly from the PostgreSQL database.
+
 ---
 
 ## How This Magic Works
@@ -68,6 +74,24 @@ The simulation runs in two heart-pounding stages:
 - **Real-Time Updates:**
   - Live race updates flow to the `race` Kafka topic as the drama unfolds under the Singapore lights.
 
+### Data Processing Stage
+
+- **Spark Streaming:**
+  - A PySpark application consumes race data from the `race` Kafka topic in real-time.
+  - The application processes and transforms the data, extracting key metrics like lap times and driver performance.
+  - Processed data is continuously written to a PostgreSQL database, providing a solid foundation for analytics.
+
+### Analytics Dashboard
+
+- **Streamlit Visualization:**
+  - A real-time Streamlit dashboard provides an interactive view of the race as it unfolds.
+  - Features include:
+    - Current race status and conditions
+    - Live driver standings with gaps to the leader
+    - Lap-by-lap time comparison between selected drivers
+    - Race progress tracking
+  - The dashboard refreshes automatically to show the latest race data from PostgreSQL.
+
 ---
 
 ## Setup & Installation
@@ -88,12 +112,47 @@ The simulation runs in two heart-pounding stages:
      bin/kafka-server-start.sh config/server.properties
      ```
 
+- **Apache Spark:**
+  Install Spark 3.x locally or use Docker.
+
+- **PostgreSQL:**
+  Install PostgreSQL locally or use Docker.
+
+  **Create the required database and tables:**
+  ```sql
+  CREATE DATABASE f1db;
+  
+  -- Connect to the f1db database
+  \c f1db
+  
+  -- Create table for storing lap times
+  CREATE TABLE f1_lap_times (
+    id SERIAL PRIMARY KEY,
+    current_lap INT,
+    driver_name VARCHAR(100),
+    driver_number INT,
+    lap_time FLOAT
+  );
+  
+  -- Create table for race updates
+  CREATE TABLE race_updates (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    circuit_name VARCHAR(100),
+    current_lap INT,
+    total_laps INT,
+    race_status VARCHAR(50),
+    weather VARCHAR(50),
+    cars JSONB
+  );
+  ```
+
 - **Python 3.8+**
 
 - **Python Dependencies:**  
   Install required libraries:
   ```bash
-  pip install kafka-python
+  pip install kafka-python pyspark psycopg2 streamlit pandas matplotlib
   ```
 
 ### Creating Kafka Topics
@@ -129,8 +188,74 @@ python race_simulation.py
 
 The race simulation script will consume the grid message, simulate the entire Singapore Grand Prix, and send live updates to the `race` topic.
 
+### Run Data Processing Pipeline:
+Start the Spark streaming job to process race data and write to PostgreSQL:
+
+```bash
+spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,org.postgresql:postgresql:42.5.1 f1_data_processing.py
+```
+
+### Launch Analytics Dashboard:
+Start the Streamlit dashboard to visualize the race in real-time:
+
+```bash
+streamlit run f1_analytics.py
+```
+
+Access the dashboard in your browser at http://localhost:8501
+
 ---
 
-Enjoy exploring real-time event processing with Apache Kafka while experiencing the thrills of the Singapore GP - where racing meets the night, and Kafka meets F1!
+## Data Flow Architecture
+
+```
+                 ┌───────────────┐
+                 │  qualifying.py│
+                 └───────┬───────┘
+                         │
+                         ▼
+      ┌───────────────────────────────┐
+      │     Kafka Topic: "quali"      │
+      └───────────────────────────────┘
+                         │
+                         │
+                         ▼
+      ┌───────────────────────────────┐
+      │     Kafka Topic: "grid"       │
+      └───────────────────────────────┘
+                         │
+                         │
+                         ▼
+                 ┌───────────────┐
+                 │race_simulation│
+                 └───────┬───────┘
+                         │
+                         ▼
+      ┌───────────────────────────────┐
+      │     Kafka Topic: "race"       │
+      └───────────────────────────────┘
+                         │
+                         ▼
+       ┌─────────────────────────────┐
+       │   f1_data_processing.py     │
+       │      (PySpark Job)          │
+       └─────────────┬───────────────┘
+                     │
+                     ▼
+         ┌─────────────────────┐
+         │   PostgreSQL DB     │
+         │   (f1db)            │
+         └─────────┬───────────┘
+                   │
+                   ▼
+         ┌─────────────────────┐
+         │   f1_analytics.py   │
+         │  (Streamlit App)    │
+         └─────────────────────┘
+```
+
+---
+
+Enjoy exploring real-time event processing with Apache Kafka, Spark, and Streamlit while experiencing the thrills of the Singapore GP - where racing meets the night, and data engineering meets F1!
 
 P.S. Don't be surprised if the safety car makes multiple appearances - it's a Singapore tradition after all!
