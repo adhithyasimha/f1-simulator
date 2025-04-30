@@ -19,6 +19,9 @@ The simulation runs in two heart-pounding stages:
   The Streamlit dashboard (`f1_analytics.py`) provides real-time visualization of race standings, lap time comparisons, and race status updates directly from the PostgreSQL database.
 
 ---
+## Architecture 
+![image](https://github.com/user-attachments/assets/9dfe5e1c-a92c-4cb6-885e-e65744dab769)
+
 
 ## How This Magic Works
 
